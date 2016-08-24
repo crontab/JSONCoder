@@ -17,8 +17,8 @@
 @property (nonatomic, readonly) NSString* name;
 @property (nonatomic, readonly) BOOL optional;
 
-- (id)toObjectWithInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError **)error;
-- (void)fromObject:(id)value withInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError **)error;
+- (id)toValueWithInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError **)error;
+- (void)fromValue:(id)value withInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError **)error;
 @end
 
 
@@ -108,7 +108,7 @@ static NSDateFormatter* ISO8601Formatter()
 	{ return [self errorWithCode:1 description:[@"JSONCoder type mismatch for %@: expecting " stringByAppendingString:expected]]; }
 
 
-- (id)toObjectWithInstance:(JSONCoder *)coder options:(JSONCoderOptions)options error:(NSError **)error
+- (id)toValueWithInstance:(JSONCoder *)coder options:(JSONCoderOptions)options error:(NSError **)error
 {
 	id value = [coder valueForKey:_name];
 
@@ -131,7 +131,7 @@ static NSDateFormatter* ISO8601Formatter()
 }
 
 
-- (void)fromObject:(id)value withInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError **)error
+- (void)fromValue:(id)value withInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError **)error
 {
 	if (!value || [value isKindOfClass:NSNull.class])
 		return;
@@ -158,6 +158,13 @@ static NSDateFormatter* ISO8601Formatter()
 			value = [_itemClass arrayFromRawArray:value options:options error:error];
 		else if (error)
 			*error = [self errorTypeMismatch:@"array of objects"];
+	}
+
+	else if (![value isKindOfClass:_coderClass])
+	{
+		value = nil;
+		if (error)
+			*error = [self errorTypeMismatch:NSStringFromClass(_coderClass)];
 	}
 
 	if (!value || (error && *error))
@@ -274,7 +281,7 @@ static JSONCoderOptions _globalDecoderOptions;
 	NSMutableDictionary *result = [NSMutableDictionary new];
 	for (NSString *key in map)
 	{
-		id value = [map[key] toObjectWithInstance:self options:options error:&localError];
+		id value = [map[key] toValueWithInstance:self options:options error:&localError];
 		if (localError)
 			break;
 		if (value)
@@ -334,7 +341,20 @@ static JSONCoderOptions _globalDecoderOptions;
 
 	for (NSString *key in map)
 	{
-		UNFINISHED
+		JSONProperty* prop = map[key];
+		if (prop)
+			[prop fromValue:dict[key] withInstance:result options:options error:&localError];
+		if (localError)
+			break;
+	}
+
+	if (localError)
+	{
+		if (options & kJSONExceptions)
+			[NSException raise:@"JSONCoder" format:@"%@", localError.localizedDescription];
+		else if (error)
+			*error = localError;
+		return nil;
 	}
 
 	return result;
