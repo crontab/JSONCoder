@@ -10,9 +10,9 @@
 
 
 typedef enum {
-		kJSONSnakeCase = 0x01, // JSON data is snake case, will be converted to and from camelCase; otherwise keys will not be transformed with the exception of the $ removal
-		kJSONExceptions = 0x02, // Throw NSException instead of returning NSError; otherwise if the error argument is nil then errors are effectively ignored
-		kJSONUseClassOptions = -1,
+		kJSONUseClassOptions,
+		kJSONSnakeCase,
+		kJSONCamelCase,
 	} JSONCoderOptions;
 
 
@@ -35,10 +35,18 @@ typedef enum {
 - (NSData *)toJSON;
 - (NSData *)toJSONWithOptions:(JSONCoderOptions)options error:(NSError **)error;
 
+- (NSString *)toJSONString;
+- (NSString *)toJSONStringWithOptions:(JSONCoderOptions)options error:(NSError **)error;
+
 + (instancetype)fromDictionary:(NSDictionary *)dict;
 + (instancetype)fromDictionary:(NSDictionary *)dict options:(JSONCoderOptions)options error:(NSError **)error;
++ (NSArray *)fromArrayOfDictionaries:(NSArray *)array options:(JSONCoderOptions)options error:(NSError **)error;
 
-+ (NSArray *)arrayFromRawArray:(NSArray *)array options:(JSONCoderOptions)options error:(NSError **)error;
++ (instancetype)fromData:(NSData *)data;
++ (instancetype)fromData:(NSData *)data options:(JSONCoderOptions)options error:(NSError **)error;
+
++ (instancetype)fromString:(NSString *)jsonString;
++ (instancetype)fromString:(NSString *)jsonString options:(JSONCoderOptions)options error:(NSError **)error;
 
 @end
 

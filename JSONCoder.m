@@ -45,10 +45,11 @@ static NSDateFormatter* ISO8601Formatter()
 	static NSDateFormatter* fmt;
 	if (!fmt)
 	{
+		// TODO: microseconds are optional
 		fmt = [NSDateFormatter new];
 		fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
 		fmt.timeZone = [[NSTimeZone alloc] initWithName:@"UTC"];
-		fmt.dateFormat = @"yyyy-MM-dd'T'HH:mm:ssZZZZZ";
+		fmt.dateFormat = @"yyyy-MM-dd'T'HH:mm:ss.SSSZ";
 	}
 	return fmt;
 }
@@ -82,11 +83,7 @@ static NSDateFormatter* ISO8601Formatter()
 			else if ([cls isSubclassOfClass:NSDate.class])
 				_isDate = YES;
 			else if ([cls isSubclassOfClass:NSArray.class])
-			{
 				_itemClass = [coderClass classForCollectionProperty:_name];
-				if (!_itemClass)
-					NSLog(@"JSONCoder: WARNING: possibly invalid collection property %@.%@", NSStringFromClass(coderClass), _name);
-			}
 		}
 		free(type);
 		if (ignore)
@@ -147,7 +144,11 @@ static NSDateFormatter* ISO8601Formatter()
 	else if (_isDate)
 	{
 		if ([value isKindOfClass:NSString.class])
+		{
 			value = [ISO8601Formatter() dateFromString:value];
+			if (!value && error)
+				*error = [self errorWithCode:2 description:@"Invalid date string"];
+		}
 		else if (error)
 			*error = [self errorTypeMismatch:@"date string"];
 	}
@@ -155,16 +156,9 @@ static NSDateFormatter* ISO8601Formatter()
 	else if (_itemClass)
 	{
 		if ([value isKindOfClass:NSArray.class])
-			value = [_itemClass arrayFromRawArray:value options:options error:error];
+			value = [_itemClass fromArrayOfDictionaries:value options:options error:error];
 		else if (error)
 			*error = [self errorTypeMismatch:@"array of objects"];
-	}
-
-	else if (![value isKindOfClass:_coderClass])
-	{
-		value = nil;
-		if (error)
-			*error = [self errorTypeMismatch:NSStringFromClass(_coderClass)];
 	}
 
 	if (!value || (error && *error))
@@ -235,7 +229,7 @@ static JSONCoderOptions _globalDecoderOptions;
 		{
 			unsigned propertyCount;
 			objc_property_t *properties = class_copyPropertyList(cls, &propertyCount);
-			for (int i = 0; i < propertyCount; i++)
+			for (unsigned i = 0; i < propertyCount; i++)
 			{
 				JSONProperty *prop = [[JSONProperty alloc] initWithObjCProperty:properties[i] coderClass:self];
 				if (prop)
@@ -266,11 +260,15 @@ static JSONCoderOptions _globalDecoderOptions;
 }
 
 
++ (NSError *)errorWithCode:(NSInteger)code description:(NSString *)description
+	{ return [NSError errorWithDomain:@"JSONCoder" code:code userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:description, NSStringFromClass(self)]}]; }
+
+
 - (NSDictionary *)toDictionary
 	{ return [self toDictionaryWithOptions:kJSONUseClassOptions error:nil]; }
 
 
-- (NSDictionary *)toDictionaryWithOptions:(JSONCoderOptions)options error:(NSError **)error;
+- (NSDictionary *)toDictionaryWithOptions:(JSONCoderOptions)options error:(NSError **)error
 {
 	if (options == kJSONUseClassOptions)
 		options = self.class.encoderOptions;
@@ -290,9 +288,7 @@ static JSONCoderOptions _globalDecoderOptions;
 
 	if (localError)
 	{
-		if (options & kJSONExceptions)
-			[NSException raise:@"JSONCoder" format:@"%@", localError.localizedDescription];
-		else if (error)
+		if (error)
 			*error = localError;
 		return nil;
 	}
@@ -308,21 +304,21 @@ static JSONCoderOptions _globalDecoderOptions;
 - (NSData *)toJSONWithOptions:(JSONCoderOptions)options error:(NSError **)error
 {
 	NSDictionary *dict = [self toDictionaryWithOptions:options error:error];
-	if (error && *error)
-		return nil;
-	NSData *data = [NSJSONSerialization dataWithJSONObject:dict options:0 error:error];
-	if (error && *error)
-	{
-		if (options & kJSONExceptions)
-			[NSException raise:@"JSONCoder" format:@"%@", (*error).localizedDescription];
-		return nil;
-	}
-	return data;
+#if DEBUG
+	NSJSONWritingOptions jsonOpts = NSJSONWritingPrettyPrinted;
+#else
+	NSJSONWritingOptions jsonOpts = 0;
+#endif
+	return dict ? [NSJSONSerialization dataWithJSONObject:dict options:jsonOpts error:error] : nil;
 }
 
 
-+ (NSError *)errorWithCode:(NSInteger)code description:(NSString *)description
-	{ return [NSError errorWithDomain:@"JSONCoder" code:code userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:description, NSStringFromClass(self)]}]; }
+- (NSString *)toJSONString
+	{ return [self toJSONStringWithOptions:kJSONUseClassOptions error:nil]; }
+
+
+- (NSString *)toJSONStringWithOptions:(JSONCoderOptions)options error:(NSError **)error
+	{ return [[NSString alloc] initWithData:[self toJSON] encoding:NSUTF8StringEncoding]; }
 
 
 + (instancetype)fromDictionary:(NSDictionary *)dict
@@ -350,9 +346,7 @@ static JSONCoderOptions _globalDecoderOptions;
 
 	if (localError)
 	{
-		if (options & kJSONExceptions)
-			[NSException raise:@"JSONCoder" format:@"%@", localError.localizedDescription];
-		else if (error)
+		if (error)
 			*error = localError;
 		return nil;
 	}
@@ -361,7 +355,7 @@ static JSONCoderOptions _globalDecoderOptions;
 }
 
 
-+ (NSArray *)arrayFromRawArray:(NSArray *)array options:(JSONCoderOptions)options error:(NSError **)error
++ (NSArray *)fromArrayOfDictionaries:(NSArray *)array options:(JSONCoderOptions)options error:(NSError **)error
 {
 	if (!array)
 		return nil;
@@ -386,6 +380,35 @@ static JSONCoderOptions _globalDecoderOptions;
 	}
 	return result;
 }
+
+
++ (instancetype)fromData:(NSData *)data
+	{ return [self fromData:data options:kJSONUseClassOptions error:nil]; }
+
+
++ (instancetype)fromData:(NSData *)data options:(JSONCoderOptions)options error:(NSError **)error
+{
+	id result = [NSJSONSerialization JSONObjectWithData:data options:0 error:error];
+	if (!result)
+		return nil;
+
+	if (![result isKindOfClass:NSDictionary.class])
+	{
+		if (error)
+			*error = [self errorWithCode:1 description:@"Type mismatch for root element %@, expecting dictionary"];
+		return nil;
+	}
+
+	return [self fromDictionary:result options:options error:error];
+}
+
+
++ (instancetype)fromString:(NSString *)jsonString
+	{ return [self fromString:jsonString options:kJSONUseClassOptions error:nil]; }
+
+
++ (instancetype)fromString:(NSString *)jsonString options:(JSONCoderOptions)options error:(NSError **)error
+	{ return [self fromData:[jsonString dataUsingEncoding:NSUTF8StringEncoding] options:options error:error]; }
 
 
 @end
