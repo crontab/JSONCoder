@@ -11,10 +11,50 @@
 #import <objc/runtime.h>
 
 
+// TODO: the time part should also be optional
+
+@interface NSDate (ISO8601)
++ (NSDate *)dateWithISO8601String:(NSString *)string;
+- (NSString *)ISO8601String;
+@end
+
+
+@implementation NSDate (ISO8601)
+
+
+static NSDateFormatter *ISO8601Formatter(bool ms)
+{
+	static NSDateFormatter *fmt[2];
+	if (!fmt[ms])
+	{
+		fmt[ms] = [NSDateFormatter new];
+		fmt[ms].locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+		fmt[ms].timeZone = [[NSTimeZone alloc] initWithName:@"UTC"];
+		fmt[ms].dateFormat = ms ? @"yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ" : @"yyyy-MM-dd'T'HH:mm:ssZZZZZ";
+	}
+	return fmt[ms];
+}
+
+
+- (NSString *)ISO8601String
+	{ return [ISO8601Formatter(false) stringFromDate:self]; }
+
+
++ (NSDate *)dateWithISO8601String:(NSString *)string
+{
+	return [ISO8601Formatter(true) dateFromString:string] ?: [ISO8601Formatter(false) dateFromString:string];
+}
+
+
+@end
+
+
+
+
 @interface JSONProperty : NSObject
 - (id)initWithObjCProperty:(objc_property_t)property coderClass:(Class)coderClass;
 
-@property (nonatomic, readonly) NSString* name;
+@property (nonatomic, readonly) NSString *name;
 @property (nonatomic, readonly) BOOL optional;
 
 - (id)toValueWithInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError **)error;
@@ -31,27 +71,12 @@
 }
 
 
-static NSString* toSnakeCase(NSString* s)
+static NSString *toSnakeCase(NSString *s)
 {
 	static NSRegularExpression *regex;
 	if (!regex)
 		regex = [NSRegularExpression regularExpressionWithPattern:@"(?<=.)([A-Z]*)([A-Z])" options:0 error:nil];
 	return [regex stringByReplacingMatchesInString:s options:0 range:NSMakeRange(0, s.length) withTemplate:@"$1_$2"].lowercaseString;
-}
-
-
-static NSDateFormatter* ISO8601Formatter()
-{
-	static NSDateFormatter* fmt;
-	if (!fmt)
-	{
-		// TODO: microseconds are optional
-		fmt = [NSDateFormatter new];
-		fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
-		fmt.timeZone = [[NSTimeZone alloc] initWithName:@"UTC"];
-		fmt.dateFormat = @"yyyy-MM-dd'T'HH:mm:ss.SSSZ";
-	}
-	return fmt;
 }
 
 
@@ -61,22 +86,22 @@ static NSDateFormatter* ISO8601Formatter()
 	{
 		_coderClass = coderClass;
 		// NSLog(@"%s", property_getAttributes(property));
-		const char* name = property_getName(property);
+		const char *name = property_getName(property);
 		_name = @(name);
 
-		char* readonly = property_copyAttributeValue(property, "R");
+		char *readonly = property_copyAttributeValue(property, "R");
 		BOOL ignore = readonly != NULL;
 		free(readonly);
 		if (ignore)
 			return nil;
 
-		char* type = property_copyAttributeValue(property, "T");
+		char *type = property_copyAttributeValue(property, "T");
 		_optional = strstr(type, "<Optional>") != NULL;
 		ignore = strstr(type, "<Ignore>") != NULL;
 		if (!ignore && type[0] == '@' && type[1] == '"')
 		{
-			const char* b = type + 2;
-			const char* e = strpbrk(b, "\"<");
+			const char *b = type + 2;
+			const char *e = strpbrk(b, "\"<");
 			Class cls = NSClassFromString([[NSString alloc] initWithBytes:b length:(e - b) encoding:NSUTF8StringEncoding]);
 			if ([cls isSubclassOfClass:JSONCoder.class])
 				_nestedJSONCoderClass = cls;
@@ -113,7 +138,7 @@ static NSDateFormatter* ISO8601Formatter()
 		return [value toDictionaryWithOptions:options error:error];
 
 	else if (_isDate)
-		return [ISO8601Formatter() stringFromDate:value];
+		return [value ISO8601String];
 
 	else if (_itemClass)
 	{
@@ -145,7 +170,7 @@ static NSDateFormatter* ISO8601Formatter()
 	{
 		if ([value isKindOfClass:NSString.class])
 		{
-			value = [ISO8601Formatter() dateFromString:value];
+			value = [NSDate dateWithISO8601String:value];
 			if (!value && error)
 				*error = [self errorWithCode:2 description:@"Invalid date string"];
 		}
@@ -337,7 +362,7 @@ static JSONCoderOptions _globalDecoderOptions;
 
 	for (NSString *key in map)
 	{
-		JSONProperty* prop = map[key];
+		JSONProperty *prop = map[key];
 		if (prop)
 			[prop fromValue:dict[key] withInstance:result options:options error:&localError];
 		if (localError)
