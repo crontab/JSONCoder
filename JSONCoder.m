@@ -1,6 +1,5 @@
 //
 //  JSONCoder.m
-//  Jsonic
 //
 //  Created by Hovik Melikyan on 24/08/2016.
 //  Copyright © 2016 Hovik Melikyan. All rights reserved.
@@ -11,38 +10,50 @@
 #import <objc/runtime.h>
 
 
-// TODO: the time part should also be optional
+typedef enum { kISODateTimeMs, kISODateTime, kISODate,
+	kISOMax = kISODate } ISODateFormat;
+
 
 @interface NSDate (ISO8601)
-+ (NSDate *)dateWithISO8601String:(NSString *)string;
-- (NSString *)ISO8601String;
+- (NSString *)toISO8601DateTimeString;
+- (NSString *)toISO8601DateString;
++ (NSDate *)fromISO8601String:(NSString *)string;
 @end
 
 
 @implementation NSDate (ISO8601)
 
 
-static NSDateFormatter *ISO8601Formatter(bool ms)
+static NSDateFormatter *ISO8601Formatter(ISODateFormat format)
 {
-	static NSDateFormatter *fmt[2];
-	if (!fmt[ms])
+	static NSDateFormatter *fmt[kISOMax + 1];
+	if (!fmt[format])
 	{
-		fmt[ms] = [NSDateFormatter new];
-		fmt[ms].locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
-		fmt[ms].timeZone = [[NSTimeZone alloc] initWithName:@"UTC"];
-		fmt[ms].dateFormat = ms ? @"yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ" : @"yyyy-MM-dd'T'HH:mm:ssZZZZZ";
+		fmt[format] = [NSDateFormatter new];
+		fmt[format].locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+		fmt[format].timeZone = [[NSTimeZone alloc] initWithName:@"UTC"];
+		switch (format)
+		{
+			case kISODateTimeMs: fmt[format].dateFormat = @"yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ"; break;
+			case kISODateTime: fmt[format].dateFormat = @"yyyy-MM-dd'T'HH:mm:ssZZZZZ"; break;
+			case kISODate: fmt[format].dateFormat = @"yyyy-MM-dd"; break;
+		}
 	}
-	return fmt[ms];
+	return fmt[format];
 }
 
 
-- (NSString *)ISO8601String
-	{ return [ISO8601Formatter(false) stringFromDate:self]; }
+- (NSString *)toISO8601DateTimeString
+	{ return [ISO8601Formatter(kISODateTime) stringFromDate:self]; }
 
 
-+ (NSDate *)dateWithISO8601String:(NSString *)string
+- (NSString *)toISO8601DateString
+	{ return [ISO8601Formatter(kISODate) stringFromDate:self]; }
+
+
++ (NSDate *)fromISO8601String:(NSString *)string
 {
-	return [ISO8601Formatter(true) dateFromString:string] ?: [ISO8601Formatter(false) dateFromString:string];
+	return [ISO8601Formatter(kISODateTimeMs) dateFromString:string] ?: [ISO8601Formatter(kISODateTime) dateFromString:string] ?: [ISO8601Formatter(kISODate) dateFromString:string];
 }
 
 
@@ -50,7 +61,7 @@ static NSDateFormatter *ISO8601Formatter(bool ms)
 
 
 
-typedef enum { kTypeObject, kTypeArray, kTypeString, kTypeNumeric, kTypeDate } PropertyType;
+typedef enum { kTypeObject, kTypeArray, kTypeString, kTypeNumeric, kTypeDateTime, kTypeDate } PropertyType;
 
 
 @interface JSONProperty : NSObject
@@ -106,8 +117,14 @@ static NSString *toSnakeCase(NSString *s)
 		_optional = strstr(type, "<Optional>") != NULL || [coderClass propertyIsOptional:_name];
 		ignore = strstr(type, "<Ignore>") != NULL;
 
+		if (ignore)
+		{
+			free(type);
+			return nil;
+		}
+
 		// Class, e.g. T@"NSString<Optional>"
-		if (!ignore && type[0] == '@' && type[1] == '"')
+		if (type[0] == '@' && type[1] == '"')
 		{
 			const char *b = type + 2;
 			const char *e = strpbrk(b, "\"<");
@@ -119,7 +136,8 @@ static NSString *toSnakeCase(NSString *s)
 			}
 			else if ([cls isSubclassOfClass:NSDate.class])
 			{
-				_type = kTypeDate;
+				bool dateOnly = strstr(type, "<DateOnly>") != NULL;
+				_type = dateOnly ? kTypeDate : kTypeDateTime;
 			}
 			else if ([cls isSubclassOfClass:NSArray.class])
 			{
@@ -148,9 +166,8 @@ static NSString *toSnakeCase(NSString *s)
 			[self errorWithCode:2 description:@"Unsupported type (%@)"];
 
 		free(type);
-		if (ignore)
-			return nil;
 	}
+
 	return self;
 }
 
@@ -171,30 +188,49 @@ static NSString *toSnakeCase(NSString *s)
 	{ return [self errorWithCode:1 description:[@"Type mismatch for %@: expecting " stringByAppendingString:expected]]; }
 
 
-- (id)toValueWithInstance:(JSONCoder *)coder options:(JSONCoderOptions)options error:(NSError **)error
+- (id)toValueWithInstance:(JSONCoder *)coder options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	id value = [coder valueForKey:_name];
 
-	if (_type == kTypeObject)
+	switch (_type)
+	{
+
+	case kTypeObject:
 		return [value toDictionaryWithOptions:options error:error];
 
-	else if (_type == kTypeArray && _itemClass)
-	{
-		NSMutableArray *a = [NSMutableArray new];
-		for (id element in value)
-			[a addObject:[element toDictionaryWithOptions:options error:error]];
-		return a;
+	case kTypeArray:
+		if (_itemClass)
+		{
+			if (value)
+			{
+				NSMutableArray *a = [NSMutableArray new];
+				for (id element in value)
+					[a addObject:[element toDictionaryWithOptions:options error:error]];
+				return a;
+			}
+			else
+				return nil;
+		}
+		else
+			return value;
+
+	case kTypeDateTime:
+		return [value toISO8601DateTimeString];
+
+	case kTypeDate:
+		return [value toISO8601DateString];
+		
+	case kTypeString:
+	case kTypeNumeric:
+		return value;
+
 	}
 
-	else if (_type == kTypeDate)
-		return [value ISO8601String];
-
-	else
-		return value;
+	assert(0);
 }
 
 
-- (void)fromValue:(id)value withInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError **)error
+- (void)fromValue:(id)value withInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	if (!value || [value isKindOfClass:NSNull.class])
 		return;
@@ -229,10 +265,11 @@ static NSString *toSnakeCase(NSString *s)
 			*error = [self errorTypeMismatch:@"numeric"];
 		break;
 
+	case kTypeDateTime:
 	case kTypeDate:
 		if ([value isKindOfClass:NSString.class])
 		{
-			value = [NSDate dateWithISO8601String:value];
+			value = [NSDate fromISO8601String:value];
 			if (!value && error)
 				*error = [self errorWithCode:3 description:@"Invalid date string (%@)"];
 		}
@@ -346,10 +383,11 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	{ return [self toDictionaryWithOptions:kJSONUseClassOptions error:nil]; }
 
 
-- (NSDictionary *)toDictionaryWithOptions:(JSONCoderOptions)options error:(NSError **)error
+- (NSDictionary *)toDictionaryWithOptions:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	if (options == kJSONUseClassOptions)
 		options = self.class.encoderOptions;
+
 	NSError *localError = nil;
 
 	NSDictionary <NSString *, JSONProperty *> *map = [self.class mapWithOptions:options];
@@ -381,11 +419,11 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 }
 
 
-- (NSData *)toJSON
-	{ return [self toJSONWithOptions:kJSONUseClassOptions error:nil]; }
+- (NSData *)toJSONData
+	{ return [self toJSONDataWithOptions:kJSONUseClassOptions error:nil]; }
 
 
-- (NSData *)toJSONWithOptions:(JSONCoderOptions)options error:(NSError **)error
+- (NSData *)toJSONDataWithOptions:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	NSDictionary *dict = [self toDictionaryWithOptions:options error:error];
 #if DEBUG
@@ -401,9 +439,9 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	{ return [self toJSONStringWithOptions:kJSONUseClassOptions error:nil]; }
 
 
-- (NSString *)toJSONStringWithOptions:(JSONCoderOptions)options error:(NSError **)error
+- (NSString *)toJSONStringWithOptions:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
-	NSData* data = [self toJSONWithOptions:options error:error];
+	NSData* data = [self toJSONDataWithOptions:options error:error];
 	return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
 }
 
@@ -412,10 +450,13 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	{ return [self fromDictionary:dict options:kJSONUseClassOptions error:nil]; }
 
 
-+ (instancetype)fromDictionary:(NSDictionary *)dict options:(JSONCoderOptions)options error:(NSError **)error
++ (instancetype)fromDictionary:(NSDictionary *)dict options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	if (!dict)
 		return nil;
+
+	if (options == kJSONUseClassOptions)
+		options = self.decoderOptions;
 
 	NSError *localError = nil;
 	JSONCoder *result = [self new];
@@ -448,7 +489,7 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 }
 
 
-+ (NSArray *)fromArrayOfDictionaries:(NSArray *)array options:(JSONCoderOptions)options error:(NSError **)error
++ (NSArray *)fromArrayOfDictionaries:(NSArray *)array options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	if (!array)
 		return nil;
@@ -479,7 +520,7 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	{ return [self fromData:data options:kJSONUseClassOptions error:nil]; }
 
 
-+ (instancetype)fromData:(NSData *)data options:(JSONCoderOptions)options error:(NSError **)error
++ (instancetype)fromData:(NSData *)data options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	id result = [NSJSONSerialization JSONObjectWithData:data options:0 error:error];
 	if (!result)
@@ -496,11 +537,11 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 }
 
 
-+ (instancetype)fromString:(NSString *)jsonString
-	{ return [self fromString:jsonString options:kJSONUseClassOptions error:nil]; }
++ (instancetype)fromJSONString:(NSString *)jsonString
+	{ return [self fromJSONString:jsonString options:kJSONUseClassOptions error:nil]; }
 
 
-+ (instancetype)fromString:(NSString *)jsonString options:(JSONCoderOptions)options error:(NSError **)error
++ (instancetype)fromJSONString:(NSString *)jsonString options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 	{ return [self fromData:[jsonString dataUsingEncoding:NSUTF8StringEncoding] options:options error:error]; }
 
 
