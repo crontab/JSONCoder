@@ -265,8 +265,7 @@ static NSString *toSnakeCase(NSString *s)
 
 
 @interface JSONCoder ()
-+ (JSONCoderMaps *)JSONMaps;
-+ (void)setJSONMaps:(JSONCoderMaps *)maps;
+@property (class) JSONCoderMaps *JSONMaps;
 @end
 
 
@@ -277,20 +276,14 @@ static JSONCoderOptions _globalEncoderOptions = kJSONSnakeCase;
 static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 
-+ (void)setGlobalEncoderOptions:(JSONCoderOptions)options
-	{ _globalEncoderOptions = options; }
++ (JSONCoderOptions)globalEncoderOptions						{ return _globalEncoderOptions; }
++ (void)setGlobalEncoderOptions:(JSONCoderOptions)options		{ _globalEncoderOptions = options; }
++ (JSONCoderOptions)globalDecoderOptions						{ return _globalDecoderOptions; }
++ (void)setGlobalDecoderOptions:(JSONCoderOptions)options		{ _globalDecoderOptions = options; }
 
 
-+ (void)setGlobalDecoderOptions:(JSONCoderOptions)options
-	{ _globalDecoderOptions = options; }
-
-
-+ (JSONCoderOptions)encoderOptions
-	{ return _globalEncoderOptions; }
-
-
-+ (JSONCoderOptions)decoderOptions
-	{ return _globalDecoderOptions; }
++ (JSONCoderOptions)encoderOptions								{ return _globalEncoderOptions; }
++ (JSONCoderOptions)decoderOptions								{ return _globalDecoderOptions; }
 
 
 + (Class)classForCollectionProperty:(NSString *)propertyName

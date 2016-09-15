@@ -19,12 +19,12 @@ typedef enum {
 @interface JSONCoder : NSObject
 
 // Global options that affect all classes by default
-+ (void)setGlobalEncoderOptions:(JSONCoderOptions)options; // to JSON
-+ (void)setGlobalDecoderOptions:(JSONCoderOptions)options; // from JSON
+@property (class) JSONCoderOptions globalEncoderOptions; // to JSON
+@property (class) JSONCoderOptions globalDecoderOptions; // from JSON
 
 // These can be overridden in your subclasses; by default they return the global options
-+ (JSONCoderOptions)encoderOptions;
-+ (JSONCoderOptions)decoderOptions;
+@property (class, readonly) JSONCoderOptions encoderOptions;
+@property (class, readonly) JSONCoderOptions decoderOptions;
 
 // These are compatible with JSONModel
 + (Class)classForCollectionProperty:(NSString *)propertyName;
