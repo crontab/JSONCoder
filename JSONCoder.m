@@ -273,8 +273,8 @@ static NSString *toSnakeCase(NSString *s)
 @implementation JSONCoder
 
 
-static JSONCoderOptions _globalEncoderOptions;
-static JSONCoderOptions _globalDecoderOptions;
+static JSONCoderOptions _globalEncoderOptions = kJSONSnakeCase;
+static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 
 + (void)setGlobalEncoderOptions:(JSONCoderOptions)options
@@ -409,7 +409,10 @@ static JSONCoderOptions _globalDecoderOptions;
 
 
 - (NSString *)toJSONStringWithOptions:(JSONCoderOptions)options error:(NSError **)error
-	{ return [[NSString alloc] initWithData:[self toJSONWithOptions:options error:error] encoding:NSUTF8StringEncoding]; }
+{
+	NSData* data = [self toJSONWithOptions:options error:error];
+	return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+}
 
 
 + (instancetype)fromDictionary:(NSDictionary *)dict

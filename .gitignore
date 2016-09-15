@@ -24,3 +24,5 @@ JSONCoderTest.xcodeproj
 main.m
 
 test.json
+
+test-camel.json
