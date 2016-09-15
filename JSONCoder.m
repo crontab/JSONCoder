@@ -87,13 +87,14 @@ static NSString *toSnakeCase(NSString *s)
 {
 	if (self = [super init])
 	{
+		const char *name = property_getName(property);
+		_name = @(name);
+
 #if DEBUG
 		assert([coderClass isSubclassOfClass:JSONCoder.class]);
 		_coderClass = coderClass;
+		// NSLog(@"%s: %s", name, property_getAttributes(property));
 #endif
-		const char *name = property_getName(property);
-		_name = @(name);
-		NSLog(@"%s: %s", name, property_getAttributes(property));
 
 		char *readonly = property_copyAttributeValue(property, "R");
 		BOOL ignore = readonly != NULL;
@@ -134,7 +135,7 @@ static NSString *toSnakeCase(NSString *s)
 				_type = kTypeString;
 			}
 			else
-				[self errorWithCode:2 description:@"JSONCoder unsupported type"];
+				[self errorWithCode:2 description:@"Unsupported type (%@)"];
 		}
 
 		// Non-object type, assume scalar and see if we can support it
@@ -144,7 +145,7 @@ static NSString *toSnakeCase(NSString *s)
 			_type = kTypeNumeric;
 		}
 		else
-			[self errorWithCode:2 description:@"JSONCoder unsupported type"];
+			[self errorWithCode:2 description:@"Unsupported type (%@)"];
 
 		free(type);
 		if (ignore)
@@ -167,7 +168,7 @@ static NSString *toSnakeCase(NSString *s)
 
 
 - (NSError *)errorTypeMismatch:(NSString *)expected
-	{ return [self errorWithCode:1 description:[@"JSONCoder type mismatch for %@: expecting " stringByAppendingString:expected]]; }
+	{ return [self errorWithCode:1 description:[@"Type mismatch for %@: expecting " stringByAppendingString:expected]]; }
 
 
 - (id)toValueWithInstance:(JSONCoder *)coder options:(JSONCoderOptions)options error:(NSError **)error
@@ -233,7 +234,7 @@ static NSString *toSnakeCase(NSString *s)
 		{
 			value = [NSDate dateWithISO8601String:value];
 			if (!value && error)
-				*error = [self errorWithCode:3 description:@"Invalid date string"];
+				*error = [self errorWithCode:3 description:@"Invalid date string (%@)"];
 		}
 		else if (error)
 			*error = [self errorTypeMismatch:@"date string"];
@@ -363,11 +364,17 @@ static JSONCoderOptions _globalDecoderOptions;
 	NSMutableDictionary *result = [NSMutableDictionary new];
 	for (NSString *key in map)
 	{
-		id value = [map[key] toValueWithInstance:self options:options error:&localError];
+		JSONProperty *prop = map[key];
+		id value = [prop toValueWithInstance:self options:options error:&localError];
 		if (localError)
 			break;
 		if (value)
 			result[key] = value;
+		else if (!prop.optional)
+		{
+			localError = [prop errorWithCode:4 description:@"%@ is required"];
+			break;
+		}
 	}
 
 	if (localError)
@@ -402,7 +409,7 @@ static JSONCoderOptions _globalDecoderOptions;
 
 
 - (NSString *)toJSONStringWithOptions:(JSONCoderOptions)options error:(NSError **)error
-	{ return [[NSString alloc] initWithData:[self toJSON] encoding:NSUTF8StringEncoding]; }
+	{ return [[NSString alloc] initWithData:[self toJSONWithOptions:options error:error] encoding:NSUTF8StringEncoding]; }
 
 
 + (instancetype)fromDictionary:(NSDictionary *)dict
@@ -423,9 +430,15 @@ static JSONCoderOptions _globalDecoderOptions;
 	{
 		JSONProperty *prop = map[key];
 		if (prop)
-			[prop fromValue:dict[key] withInstance:result options:options error:&localError];
-		if (localError)
-			break;
+		{
+			id value = dict[key];
+			if (!value && !prop.optional)
+				localError = [prop errorWithCode:5 description:@"%@ is required"];
+			else
+				[prop fromValue:value withInstance:result options:options error:&localError];
+			if (localError)
+				break;
+		}
 	}
 
 	if (localError)
