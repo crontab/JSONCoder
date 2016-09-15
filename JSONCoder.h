@@ -26,8 +26,9 @@ typedef enum {
 + (JSONCoderOptions)encoderOptions;
 + (JSONCoderOptions)decoderOptions;
 
-// This is compatible with JSONModel
+// These are compatible with JSONModel
 + (Class)classForCollectionProperty:(NSString *)propertyName;
++ (BOOL)propertyIsOptional:(NSString *)propertyName; // currently all scalars are optional on input and are always encoded on output, so this method is almost useless
 
 - (NSDictionary *)toDictionary;
 - (NSDictionary *)toDictionaryWithOptions:(JSONCoderOptions)options error:(NSError **)error; // currently no errors are returned

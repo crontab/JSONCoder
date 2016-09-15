@@ -50,6 +50,8 @@ static NSDateFormatter *ISO8601Formatter(bool ms)
 
 
 
+typedef enum { kTypeObject, kTypeArray, kTypeString, kTypeNumeric, kTypeDate } PropertyType;
+
 
 @interface JSONProperty : NSObject
 - (id)initWithObjCProperty:(objc_property_t)property coderClass:(Class)coderClass;
@@ -64,10 +66,11 @@ static NSDateFormatter *ISO8601Formatter(bool ms)
 
 @implementation JSONProperty
 {
+#if DEBUG
 	Class _coderClass; // for diagnostics messages
-	Class _nestedJSONCoderClass;
-	BOOL _isDate;
-	Class _itemClass; // for array properties
+#endif
+	Class _itemClass; // nested model or array item class
+	PropertyType _type;
 }
 
 
@@ -84,10 +87,13 @@ static NSString *toSnakeCase(NSString *s)
 {
 	if (self = [super init])
 	{
+#if DEBUG
+		assert([coderClass isSubclassOfClass:JSONCoder.class]);
 		_coderClass = coderClass;
-		// NSLog(@"%s", property_getAttributes(property));
+#endif
 		const char *name = property_getName(property);
 		_name = @(name);
+		NSLog(@"%s: %s", name, property_getAttributes(property));
 
 		char *readonly = property_copyAttributeValue(property, "R");
 		BOOL ignore = readonly != NULL;
@@ -96,20 +102,50 @@ static NSString *toSnakeCase(NSString *s)
 			return nil;
 
 		char *type = property_copyAttributeValue(property, "T");
-		_optional = strstr(type, "<Optional>") != NULL;
+		_optional = strstr(type, "<Optional>") != NULL || [coderClass propertyIsOptional:_name];
 		ignore = strstr(type, "<Ignore>") != NULL;
+
+		// Class, e.g. T@"NSString<Optional>"
 		if (!ignore && type[0] == '@' && type[1] == '"')
 		{
 			const char *b = type + 2;
 			const char *e = strpbrk(b, "\"<");
 			Class cls = NSClassFromString([[NSString alloc] initWithBytes:b length:(e - b) encoding:NSUTF8StringEncoding]);
 			if ([cls isSubclassOfClass:JSONCoder.class])
-				_nestedJSONCoderClass = cls;
+			{
+				_type = kTypeObject;
+				_itemClass = cls;
+			}
 			else if ([cls isSubclassOfClass:NSDate.class])
-				_isDate = YES;
+			{
+				_type = kTypeDate;
+			}
 			else if ([cls isSubclassOfClass:NSArray.class])
-				_itemClass = [coderClass classForCollectionProperty:_name];
+			{
+				_type = kTypeArray;
+				_itemClass = [coderClass classForCollectionProperty:_name]; // no encoding/decoding if _itemClass is nil; simply assign the array as is in that case
+			}
+			else if ([cls isSubclassOfClass:NSNumber.class])
+			{
+				_type = kTypeNumeric;
+			}
+			else if ([cls isSubclassOfClass:NSString.class])
+			{
+				_type = kTypeString;
+			}
+			else
+				[self errorWithCode:2 description:@"JSONCoder unsupported type"];
 		}
+
+		// Non-object type, assume scalar and see if we can support it
+		// c - char/BOOL, i - int, I - unsigned int, q - long, Q - unsigned long, f - float, d - double
+		else if (strchr("ciIqQfd", type[0]))
+		{
+			_type = kTypeNumeric;
+		}
+		else
+			[self errorWithCode:2 description:@"JSONCoder unsupported type"];
+
 		free(type);
 		if (ignore)
 			return nil;
@@ -119,7 +155,11 @@ static NSString *toSnakeCase(NSString *s)
 
 
 - (NSString *)fullName
+#if DEBUG
 	{ return [NSString stringWithFormat:@"%@.%@", NSStringFromClass(_coderClass), _name]; }
+#else
+	{ return [NSString stringWithFormat:@"<JSONCoder>.%@", _name]; }
+#endif
 
 
 - (NSError *)errorWithCode:(NSInteger)code description:(NSString *)description
@@ -134,19 +174,19 @@ static NSString *toSnakeCase(NSString *s)
 {
 	id value = [coder valueForKey:_name];
 
-	if (_nestedJSONCoderClass)
+	if (_type == kTypeObject)
 		return [value toDictionaryWithOptions:options error:error];
 
-	else if (_isDate)
-		return [value ISO8601String];
-
-	else if (_itemClass)
+	else if (_type == kTypeArray && _itemClass)
 	{
 		NSMutableArray *a = [NSMutableArray new];
 		for (id element in value)
 			[a addObject:[element toDictionaryWithOptions:options error:error]];
 		return a;
 	}
+
+	else if (_type == kTypeDate)
+		return [value ISO8601String];
 
 	else
 		return value;
@@ -158,32 +198,47 @@ static NSString *toSnakeCase(NSString *s)
 	if (!value || [value isKindOfClass:NSNull.class])
 		return;
 
-	if (_nestedJSONCoderClass)
+	switch (_type)
 	{
+
+	case kTypeObject:
 		if ([value isKindOfClass:NSDictionary.class])
-			value = [_nestedJSONCoderClass fromDictionary:value options:options error:error];
+			value = [_itemClass fromDictionary:value options:options error:error];
 		else if (error)
 			*error = [self errorTypeMismatch:@"nested object"];
-	}
+		break;
 
-	else if (_isDate)
-	{
+	case kTypeArray:
+		if ([value isKindOfClass:NSArray.class])
+		{
+			if (_itemClass) // transform if item class is known
+				value = [_itemClass fromArrayOfDictionaries:value options:options error:error];
+		}
+		else if (error)
+			*error = [self errorTypeMismatch:@"array of objects"];
+		break;
+
+	case kTypeString:
+		if (error && ![value isKindOfClass:NSString.class])
+			*error = [self errorTypeMismatch:@"string"];
+		break;
+
+	case kTypeNumeric:
+		if (error && ![value isKindOfClass:NSNumber.class])
+			*error = [self errorTypeMismatch:@"numeric"];
+		break;
+
+	case kTypeDate:
 		if ([value isKindOfClass:NSString.class])
 		{
 			value = [NSDate dateWithISO8601String:value];
 			if (!value && error)
-				*error = [self errorWithCode:2 description:@"Invalid date string"];
+				*error = [self errorWithCode:3 description:@"Invalid date string"];
 		}
 		else if (error)
 			*error = [self errorTypeMismatch:@"date string"];
-	}
+		break;
 
-	else if (_itemClass)
-	{
-		if ([value isKindOfClass:NSArray.class])
-			value = [_itemClass fromArrayOfDictionaries:value options:options error:error];
-		else if (error)
-			*error = [self errorTypeMismatch:@"array of objects"];
 	}
 
 	if (!value || (error && *error))
@@ -239,6 +294,10 @@ static JSONCoderOptions _globalDecoderOptions;
 
 + (Class)classForCollectionProperty:(NSString *)propertyName
 	{ return nil; }
+
+
++ (BOOL)propertyIsOptional:(NSString *)propertyName
+	{ return NO; }
 
 
 + (JSONCoderMaps *)JSONMaps
