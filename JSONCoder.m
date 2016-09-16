@@ -1,9 +1,25 @@
-//
-//  JSONCoder.m
-//
-//  Created by Hovik Melikyan on 24/08/2016.
-//  Copyright © 2016 Hovik Melikyan. All rights reserved.
-//
+/*
+
+	Copyright (c) 2016 Hovik Melikyan
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy of
+	this software and associated documentation files (the "Software"), to deal in
+	the Software without restriction, including without limitation the rights to
+	use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+	the Software, and to permit persons to whom the Software is furnished to do so,
+	subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+	FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+	COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+	IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+	CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+*/
 
 #import "JSONCoder.h"
 
@@ -158,7 +174,8 @@ static NSString *toSnakeCase(NSString *s)
 
 		// Non-object type, assume scalar and see if we can support it
 		// c - char/BOOL, i - int, I - unsigned int, q - long, Q - unsigned long, f - float, d - double
-		else if (strchr("ciIqQfd", type[0]))
+		// Also on 64-bit hardware (?) B - BOOL
+		else if (strchr("ciIqQfdB", type[0]))
 		{
 			_type = kTypeNumeric;
 		}
@@ -181,7 +198,13 @@ static NSString *toSnakeCase(NSString *s)
 
 
 - (NSError *)errorWithCode:(NSInteger)code description:(NSString *)description
-	{ return [NSError errorWithDomain:@"JSONCoder" code:code userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:description, self.fullName]}]; }
+{
+	NSString* descr = [NSString stringWithFormat:description, self.fullName];
+#if DEBUG
+	NSLog(@"JSONCoder Error: %@", descr);
+#endif
+	return [NSError errorWithDomain:@"JSONCoder" code:code userInfo:@{NSLocalizedDescriptionKey: descr}];
+}
 
 
 - (NSError *)errorTypeMismatch:(NSString *)expected
@@ -516,11 +539,11 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 }
 
 
-+ (instancetype)fromData:(NSData *)data
-	{ return [self fromData:data options:kJSONUseClassOptions error:nil]; }
++ (instancetype)fromJSONData:(NSData *)data
+	{ return [self fromJSONData:data options:kJSONUseClassOptions error:nil]; }
 
 
-+ (instancetype)fromData:(NSData *)data options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
++ (instancetype)fromJSONData:(NSData *)data options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	id result = [NSJSONSerialization JSONObjectWithData:data options:0 error:error];
 	if (!result)
@@ -542,7 +565,11 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 
 + (instancetype)fromJSONString:(NSString *)jsonString options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
-	{ return [self fromData:[jsonString dataUsingEncoding:NSUTF8StringEncoding] options:options error:error]; }
+	{ return [self fromJSONData:[jsonString dataUsingEncoding:NSUTF8StringEncoding] options:options error:error]; }
+
+
+- (instancetype)clone
+	{ return [self.class fromJSONData:[self toJSONDataWithOptions:kJSONNoMapping error:nil] options:kJSONNoMapping error:nil]; }
 
 
 @end
