@@ -18,11 +18,9 @@ xcuserdata
 *.hmap
 *.ipa
 Pods/
-Settings.bundle/ThirdPartyCode.plist
 
+# Testing stuff
 JSONCoderTest.xcodeproj
 main.m
-
 test.json
-
 test-camel.json
