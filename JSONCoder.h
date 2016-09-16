@@ -1,5 +1,7 @@
 /*
 
+	JSONCoder.h
+
 	Copyright (c) 2016 Hovik Melikyan
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -45,6 +47,8 @@
 	NSNumber and the scalar types are all mutually convertible; an attempt to convert between any other types listed above results in error.
 
 	Scalar types are always included in conversions to JSON; marking them as optional (using the propertyIsOptional method, as there is no way of attaching the <Optional> protocol to these types) only affects conversion from JSON.
+
+	A property name can start with the dollar sign ($) in case of keyword or other naming conflicts. For example, a property named `description` or `class` can be disambiguated by declaring them as `$description` and `$class`. Such properties are mapped to JSON names without the `$` prefix.
 
 */
 
