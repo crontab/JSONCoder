@@ -32,13 +32,6 @@ typedef enum { kISODateTimeMs, kISODateTime, kISODate,
 	kISOMax = kISODate } ISODateFormat;
 
 
-@interface NSDate (ISO8601)
-- (NSString *)toISO8601DateTimeString;
-- (NSString *)toISO8601DateString;
-+ (NSDate *)fromISO8601String:(NSString *)string;
-@end
-
-
 @implementation NSDate (ISO8601)
 
 
@@ -257,6 +250,7 @@ static NSString *toSnakeCase(NSString *s)
 
 - (void)fromValue:(id)value withInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
+	// TODO: in case of NSNull the value should be set to its default: 0 or nil depending on the type
 	if (!value || [value isKindOfClass:NSNull.class])
 		return;
 
@@ -547,7 +541,7 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 + (instancetype)fromJSONData:(NSData *)data options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
-	id result = [NSJSONSerialization JSONObjectWithData:data options:0 error:error];
+	id result = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:error] : nil;
 	if (!result)
 		return nil;
 

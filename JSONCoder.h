@@ -118,3 +118,11 @@ typedef enum
 // Prevent compiler warnings when assigning to and from properties with JSON protocols
 @interface NSObject (JSONCoderPropertyCompatibility) <Optional, Ignore, DateOnly>
 @end
+
+
+@interface NSDate (ISO8601)
+- (NSString *)toISO8601DateTimeString;
+- (NSString *)toISO8601DateString;
++ (NSDate *)fromISO8601String:(NSString *)string;
+@end
+
