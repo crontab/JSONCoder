@@ -38,9 +38,9 @@
 		- NSNumber
 		- NSDate, optionally with <DateOnly> protocol; these are converted to and from ISO8601 time stamps
 		- Object types derived from JSONCoder
-		- Primitive scalar types such as int, BOOL, float
 		- Arrays of any of the above; the array item type can be specified by overriding the classForCollectionProperty method, though this is not required for NSString and NSNumber element types
 		- Dictionaries with the following element types: NSString, NSNumber, nested arrays and dictionaries of the same
+		- Primitive scalar types such as int, BOOL, float
 
 	All proprties are required to be present in JSON data when decoding, as well as they are required to be non-nil when encoding to JSON, unless a property is makred with the <Optional> protocol. Optional properties are not included in encoding if their value is nil. This does not apply to scalar types, which are always encoded.
 
