@@ -17,11 +17,11 @@ Data types allowed in encodable properties are:
 - Dictionaries with the following element types: NSString, NSNumber, nested arrays and dictionaries of the same
 - Primitive scalar types such as int, BOOL, float
 
-All proprties are required to be present in JSON data when decoding, as well as they are required to be non-nil when encoding to JSON, unless a property is makred with the `<Optional>` protocol. Optional properties are not included in encoding if their value is nil. This does not apply to scalar types, which are always encoded.
+All proprties are required to be present in JSON data when decoding from JSON, unless a property is makred with the `<Optional>` protocol. For scalar properties, because there is no way of attaching protocols to them, use the propertyIsOptional method to indicate an optional property.
+	
+When encoding to JSON, properties other than scalar ones are not included in encoding if their value is nil; scalar types are always included regardless of their value.
 
 NSNumber and the scalar types are all mutually convertible; an attempt to convert between any other types listed above results in error.
-
-Scalar types are always included in conversions to JSON; marking them as optional (using the propertyIsOptional method, as there is no way of attaching the `<Optional>` protocol to these types) only affects conversion from JSON.
 
 A property name can start with the dollar sign ($) in case of keyword or other naming conflicts. For example, a property named `description` or `class` can be disambiguated by declaring them as `$description` and `$class`. Such properties are mapped to JSON names without the `$` prefix.
 

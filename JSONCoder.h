@@ -42,7 +42,9 @@
 		- Dictionaries with the following element types: NSString, NSNumber, nested arrays and dictionaries of the same
 		- Primitive scalar types such as int, BOOL, float
 
-	All proprties are required to be present in JSON data when decoding, as well as they are required to be non-nil when encoding to JSON, unless a property is makred with the <Optional> protocol. Optional properties are not included in encoding if their value is nil. This does not apply to scalar types, which are always encoded.
+	All proprties are required to be present in JSON data when decoding from JSON, unless a property is makred with the <Optional> protocol.
+	
+	When encoding to JSON, properties other than scalar ones are not included in encoding if their value is nil; scalar types are always included regardless of their value.
 
 	NSNumber and the scalar types are all mutually convertible; an attempt to convert between any other types listed above results in error.
 
@@ -76,13 +78,13 @@ typedef enum
 + (JSONCoderOptions)decoderOptions;
 
 - (NSDictionary *)toDictionary;
-- (NSDictionary *)toDictionaryWithOptions:(JSONCoderOptions)options error:(NSError **)error;
+- (NSDictionary *)toDictionaryWithOptions:(JSONCoderOptions)options;
 
 - (NSData *)toJSONData;
-- (NSData *)toJSONDataWithOptions:(JSONCoderOptions)options error:(NSError **)error;
+- (NSData *)toJSONDataWithOptions:(JSONCoderOptions)options;
 
 - (NSString *)toJSONString;
-- (NSString *)toJSONStringWithOptions:(JSONCoderOptions)options error:(NSError **)error;
+- (NSString *)toJSONStringWithOptions:(JSONCoderOptions)options;
 
 + (instancetype)fromDictionary:(NSDictionary *)dict;
 + (instancetype)fromDictionary:(NSDictionary *)dict options:(JSONCoderOptions)options error:(NSError **)error;

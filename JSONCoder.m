@@ -81,7 +81,7 @@ typedef enum { kTypeObject, kTypeArray, kTypeString, kTypeNumeric, kTypeDateTime
 @property (nonatomic, readonly) NSString *name;
 @property (nonatomic, readonly) BOOL optional;
 
-- (id)toValueWithInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError **)error;
+- (id)toValueWithInstance:(JSONCoder*)coder options:(JSONCoderOptions)options;
 - (void)fromValue:(id)value withInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError **)error;
 @end
 
@@ -206,7 +206,7 @@ static NSString *toSnakeCase(NSString *s)
 	{ return [self errorWithCode:1 description:[@"Type mismatch for %@: expecting " stringByAppendingString:expected]]; }
 
 
-- (id)toValueWithInstance:(JSONCoder *)coder options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
+- (id)toValueWithInstance:(JSONCoder *)coder options:(JSONCoderOptions)options
 {
 	id value = [coder valueForKey:_name];
 
@@ -214,7 +214,7 @@ static NSString *toSnakeCase(NSString *s)
 	{
 
 	case kTypeObject:
-		return [value toDictionaryWithOptions:options error:error];
+		return [value toDictionaryWithOptions:options];
 
 	case kTypeArray:
 		if (_itemClass)
@@ -223,7 +223,7 @@ static NSString *toSnakeCase(NSString *s)
 			{
 				NSMutableArray *a = [NSMutableArray new];
 				for (id element in value)
-					[a addObject:[element toDictionaryWithOptions:options error:error]];
+					[a addObject:[element toDictionaryWithOptions:options]];
 				return a;
 			}
 			else
@@ -399,15 +399,13 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 
 - (NSDictionary *)toDictionary
-	{ return [self toDictionaryWithOptions:kJSONUseClassOptions error:nil]; }
+	{ return [self toDictionaryWithOptions:kJSONUseClassOptions]; }
 
 
-- (NSDictionary *)toDictionaryWithOptions:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
+- (NSDictionary *)toDictionaryWithOptions:(JSONCoderOptions)options
 {
 	if (options == kJSONUseClassOptions)
 		options = self.class.encoderOptions;
-
-	NSError *localError = nil;
 
 	NSDictionary <NSString *, JSONProperty *> *map = [self.class mapWithOptions:options];
 
@@ -415,23 +413,9 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	for (NSString *key in map)
 	{
 		JSONProperty *prop = map[key];
-		id value = [prop toValueWithInstance:self options:options error:&localError];
-		if (localError)
-			break;
+		id value = [prop toValueWithInstance:self options:options];
 		if (value)
 			result[key] = value;
-		else if (!prop.optional)
-		{
-			localError = [prop errorWithCode:4 description:@"%@ is required"];
-			break;
-		}
-	}
-
-	if (localError)
-	{
-		if (error)
-			*error = localError;
-		return nil;
 	}
 
 	return result;
@@ -439,28 +423,28 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 
 - (NSData *)toJSONData
-	{ return [self toJSONDataWithOptions:kJSONUseClassOptions error:nil]; }
+	{ return [self toJSONDataWithOptions:kJSONUseClassOptions]; }
 
 
-- (NSData *)toJSONDataWithOptions:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
+- (NSData *)toJSONDataWithOptions:(JSONCoderOptions)options
 {
-	NSDictionary *dict = [self toDictionaryWithOptions:options error:error];
+	NSDictionary *dict = [self toDictionaryWithOptions:options];
 #if DEBUG
 	NSJSONWritingOptions jsonOpts = NSJSONWritingPrettyPrinted;
 #else
 	NSJSONWritingOptions jsonOpts = 0;
 #endif
-	return dict ? [NSJSONSerialization dataWithJSONObject:dict options:jsonOpts error:error] : nil;
+	return dict ? [NSJSONSerialization dataWithJSONObject:dict options:jsonOpts error:nil] : nil;
 }
 
 
 - (NSString *)toJSONString
-	{ return [self toJSONStringWithOptions:kJSONUseClassOptions error:nil]; }
+	{ return [self toJSONStringWithOptions:kJSONUseClassOptions]; }
 
 
-- (NSString *)toJSONStringWithOptions:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
+- (NSString *)toJSONStringWithOptions:(JSONCoderOptions)options
 {
-	NSData* data = [self toJSONDataWithOptions:options error:error];
+	NSData* data = [self toJSONDataWithOptions:options];
 	return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
 }
 
@@ -565,7 +549,7 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 
 - (instancetype)clone
-	{ return [self.class fromJSONData:[self toJSONDataWithOptions:kJSONNoMapping error:nil] options:kJSONNoMapping error:nil]; }
+	{ return [self.class fromJSONData:[self toJSONDataWithOptions:kJSONNoMapping] options:kJSONNoMapping error:nil]; }
 
 
 @end
