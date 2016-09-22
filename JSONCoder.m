@@ -72,7 +72,7 @@ static NSDateFormatter *ISO8601Formatter(ISODateFormat format)
 
 
 
-typedef enum { kTypeObject, kTypeArray, kTypeString, kTypeNumeric, kTypeDateTime, kTypeDate } PropertyType;
+typedef enum { kTypeObject, kTypeArray, kTypeDict, kTypeString, kTypeNumeric, kTypeDateTime, kTypeDate } PropertyType;
 
 
 @interface JSONProperty : NSObject
@@ -155,6 +155,10 @@ static NSString *toSnakeCase(NSString *s)
 				_type = kTypeArray;
 				_itemClass = [coderClass classForCollectionProperty:_name]; // no encoding/decoding if _itemClass is nil; simply assign the array as is in that case
 			}
+			else if ([cls isSubclassOfClass:NSDictionary.class])
+			{
+				_type = kTypeDict;
+			}
 			else if ([cls isSubclassOfClass:NSNumber.class])
 			{
 				_type = kTypeNumeric;
@@ -164,7 +168,7 @@ static NSString *toSnakeCase(NSString *s)
 				_type = kTypeString;
 			}
 			else
-				[self errorWithCode:2 description:@"Unsupported type (%@)"];
+				[self throwWithDescription:@"Unsupported type (%@)"];
 		}
 
 		// Non-object type, assume scalar and see if we can support it
@@ -175,7 +179,7 @@ static NSString *toSnakeCase(NSString *s)
 			_type = kTypeNumeric;
 		}
 		else
-			[self errorWithCode:2 description:@"Unsupported type (%@)"];
+			[self throwWithDescription:@"Unsupported type (%@)"];
 
 		free(type);
 	}
@@ -196,10 +200,14 @@ static NSString *toSnakeCase(NSString *s)
 {
 	NSString* descr = [NSString stringWithFormat:description, self.fullName];
 #if DEBUG
-	NSLog(@"JSONCoder Error: %@", descr);
+	NSLog(@"JSONCoder error: %@", descr);
 #endif
 	return [NSError errorWithDomain:@"JSONCoder" code:code userInfo:@{NSLocalizedDescriptionKey: descr}];
 }
+
+
+- (void)throwWithDescription:(NSString *)description
+	{ [NSException raise:@"JSONCoderPropertyError" format:description, self.fullName]; }
 
 
 - (NSError *)errorTypeMismatch:(NSString *)expected
@@ -231,6 +239,9 @@ static NSString *toSnakeCase(NSString *s)
 		}
 		else
 			return value;
+
+	case kTypeDict:
+		return value;
 
 	case kTypeDateTime:
 		return [value toISO8601DateTimeString];
@@ -272,6 +283,11 @@ static NSString *toSnakeCase(NSString *s)
 		}
 		else if (error)
 			*error = [self errorTypeMismatch:@"array of objects"];
+		break;
+
+	case kTypeDict:
+		if (error && ![value isKindOfClass:NSDictionary.class])
+			*error = [self errorTypeMismatch:@"dictionary"];
 		break;
 
 	case kTypeString:
