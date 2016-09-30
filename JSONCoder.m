@@ -72,14 +72,11 @@ static NSDateFormatter *ISO8601Formatter(ISODateFormat format)
 
 
 
-typedef enum { kTypeObject, kTypeArray, kTypeDict, kTypeString, kTypeNumeric, kTypeDateTime, kTypeDate } PropertyType;
+typedef enum { kTypeObject, kTypeArray, kTypeDict, kTypeString, kTypeNumeric, kTypeBoolean, kTypeDateTime, kTypeDate } PropertyType;
 
 
 @interface JSONProperty : NSObject
 - (id)initWithObjCProperty:(objc_property_t)property coderClass:(Class)coderClass;
-
-@property (nonatomic, readonly) NSString *name;
-@property (nonatomic, readonly) BOOL optional;
 
 - (id)toValueWithInstance:(JSONCoder*)coder options:(JSONCoderOptions)options;
 - (void)fromValue:(id)value withInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError **)error;
@@ -93,6 +90,11 @@ typedef enum { kTypeObject, kTypeArray, kTypeDict, kTypeString, kTypeNumeric, kT
 #endif
 	Class _itemClass; // nested model or array item class
 	PropertyType _type;
+
+@public
+	NSString *_name;
+	BOOL _optional;
+	BOOL _decodeOnly;
 }
 
 
@@ -126,6 +128,7 @@ static NSString *toSnakeCase(NSString *s)
 
 		char *type = property_copyAttributeValue(property, "T");
 		_optional = strstr(type, "<Optional>") != NULL || [coderClass propertyIsOptional:_name];
+		_decodeOnly = strstr(type, "<DecodeOnly>") != NULL || [coderClass propertyIsDecodeOnly:_name];
 		ignore = strstr(type, "<Ignore>") != NULL;
 
 		if (ignore)
@@ -174,9 +177,13 @@ static NSString *toSnakeCase(NSString *s)
 		// Non-object type, assume scalar and see if we can support it
 		// c - char/BOOL, i - int, I - unsigned int, q - long, Q - unsigned long, f - float, d - double
 		// Also on 64-bit hardware (?) B - BOOL
-		else if (strchr("ciIqQfdB", type[0]))
+		else if (strchr("iIqQfd", type[0]))
 		{
 			_type = kTypeNumeric;
+		}
+		else if (type[0] == 'c' || type[0] == 'B')
+		{
+			_type = kTypeBoolean;
 		}
 		else
 			[self throwWithDescription:@"Unsupported type (%@)"];
@@ -248,7 +255,10 @@ static NSString *toSnakeCase(NSString *s)
 
 	case kTypeDate:
 		return [value toISO8601DateString];
-		
+
+	case kTypeBoolean:
+		return [value boolValue] ? @(YES) : @(NO);
+
 	case kTypeString:
 	case kTypeNumeric:
 		return value;
@@ -296,8 +306,9 @@ static NSString *toSnakeCase(NSString *s)
 		break;
 
 	case kTypeNumeric:
+	case kTypeBoolean:
 		if (error && ![value isKindOfClass:NSNumber.class])
-			*error = [self errorTypeMismatch:@"numeric"];
+			*error = [self errorTypeMismatch:(_type == kTypeBoolean ? @"boolean" : @"numeric")];
 		break;
 
 	case kTypeDateTime:
@@ -366,6 +377,10 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	{ return NO; }
 
 
++ (BOOL)propertyIsDecodeOnly:(NSString *)propertyName
+	{ return NO; }
+
+
 + (JSONCoderMaps *)JSONMaps
 {
 	JSONCoderMaps *maps = objc_getAssociatedObject(self, @selector(JSONMaps));
@@ -384,7 +399,7 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 				JSONProperty *prop = [[JSONProperty alloc] initWithObjCProperty:properties[i] coderClass:self];
 				if (prop)
 				{
-					NSString *camelCaseName = ([prop.name hasPrefix:@"$"]) ? [prop.name substringFromIndex:1] : prop.name;
+					NSString *camelCaseName = ([prop->_name hasPrefix:@"$"]) ? [prop->_name substringFromIndex:1] : prop->_name;
 					maps.camelCaseMap[camelCaseName] = prop;
 					NSString *snakeCaseName = toSnakeCase(camelCaseName);
 					maps.snakeCaseMap[snakeCaseName] = prop;
@@ -429,9 +444,12 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	for (NSString *key in map)
 	{
 		JSONProperty *prop = map[key];
-		id value = [prop toValueWithInstance:self options:options];
-		if (value)
-			result[key] = value;
+		if ((options & kJSONClone) || !prop->_decodeOnly)
+		{
+			id value = [prop toValueWithInstance:self options:options];
+			if (value)
+				result[key] = value;
+		}
 	}
 
 	return result;
@@ -488,10 +506,10 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 		if (prop)
 		{
 			id value = dict[key];
-			if (!value && !prop.optional)
-				localError = [prop errorWithCode:5 description:@"%@ is required"];
-			else
+			if (value || prop->_optional || (options & kJSONClone))
 				[prop fromValue:value withInstance:result options:options error:&localError];
+			else
+				localError = [prop errorWithCode:5 description:@"%@ is required"];
 			if (localError)
 				break;
 		}
@@ -565,7 +583,7 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 
 - (instancetype)clone
-	{ return [self.class fromJSONData:[self toJSONDataWithOptions:kJSONNoMapping] options:kJSONNoMapping error:nil]; }
+	{ return [self.class fromDictionary:[self toDictionaryWithOptions:(kJSONNoMapping | kJSONClone)] options:(kJSONNoMapping | kJSONClone) error:nil]; }
 
 
 @end

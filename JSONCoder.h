@@ -44,12 +44,14 @@
 		- Primitive scalar types such as int, BOOL, float
 
 	All proprties are required to be present in JSON data when decoding from JSON, unless a property is makred with the <Optional> protocol. For scalar properties, because there is no way of attaching protocols to them, use the propertyIsOptional method instead.
-		
-	When encoding to JSON, properties with the value of nil are not included in encoding; scalar types are always included regardless of their value.
+
+	When encoding to JSON, properties with the value of nil are not included in the resulting JSON string; scalar types are always included regardless of their value. Additionally the <DecodeOnly> protocol (or the corresponding method propertyIsDecodeOnly for scalar types) can be used for properties that should be ignored when encoding, but included when decoding from JSON.
 
 	NSNumber and the scalar types are all mutually convertible; an attempt to convert between any other types listed above during decoding results in error.
 
 	A property name can start with the dollar sign ($) in case of keyword or other naming conflicts. For example, a property named `description` or `class` can be disambiguated by declaring them as `$description` and `$class`. Such properties are mapped to JSON names without the `$` prefix.
+
+	The fromDictionary and toDictionary family of methods are used internally as an intermediate step between JSON and Objective-C objects, but are also exposed in the public interface.
 
 */
 
@@ -59,9 +61,10 @@
 
 typedef enum
 	{
-		kJSONUseClassOptions,	// Fall back to class default if overridden, otherwise global default
-		kJSONSnakeCase,			// Convert property names to underscore format, this is the global default on start up
-		kJSONNoMapping,			// Do not convert property names
+		kJSONUseClassOptions = 0,	// Fall back to class default if overridden, otherwise global default
+		kJSONSnakeCase = 1,			// Convert property names to underscore format, this is the global default on start up
+		kJSONNoMapping = 2,			// Do not convert property names
+		kJSONClone = 4,				// Internal, used in the clone method; relaxes all requirements so that clone always works
 	}
 	JSONCoderOptions;
 
@@ -97,8 +100,9 @@ typedef enum
 
 + (Class)classForCollectionProperty:(NSString *)propertyName;
 + (BOOL)propertyIsOptional:(NSString *)propertyName;
++ (BOOL)propertyIsDecodeOnly:(NSString *)propertyName;
 
-- (instancetype)clone; // Deep copy of encodable properties; uses toJSON -> fromJSON
+- (instancetype)clone; // Deep copy of all encodable properties; assumes that all NSString, NSArray and NSDictionary properties are immutable
 
 @end
 
@@ -107,7 +111,11 @@ typedef enum
 @end
 
 
-@protocol Optional
+@protocol DecodeOnly // ignore when converting to JSON
+@end
+
+
+@protocol Optional // not required when converting from JSON
 @end
 
 
@@ -117,7 +125,7 @@ typedef enum
 
 
 // Prevent compiler warnings when assigning to and from properties with JSON protocols
-@interface NSObject (JSONCoderPropertyCompatibility) <Optional, Ignore, DateOnly>
+@interface NSObject (JSONCoderPropertyCompatibility) <Optional, Ignore, DateOnly, DecodeOnly>
 @end
 
 
