@@ -90,6 +90,7 @@ typedef enum
 
 + (instancetype)fromDictionary:(NSDictionary *)dict;
 + (instancetype)fromDictionary:(NSDictionary *)dict options:(JSONCoderOptions)options error:(NSError **)error;
++ (NSArray *)fromArrayOfDictionaries:(NSArray *)array;
 + (NSArray *)fromArrayOfDictionaries:(NSArray *)array options:(JSONCoderOptions)options error:(NSError **)error;
 
 + (instancetype)fromJSONData:(NSData *)data;

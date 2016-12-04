@@ -526,6 +526,10 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 }
 
 
++ (NSArray *)fromArrayOfDictionaries:(NSArray *)array
+	{ return [self fromArrayOfDictionaries:array options:kJSONUseClassOptions error:nil]; }
+
+
 + (NSArray *)fromArrayOfDictionaries:(NSArray *)array options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	if (!array)
