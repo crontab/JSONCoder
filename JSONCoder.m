@@ -307,9 +307,7 @@ static NSString *toSnakeCase(NSString *s)
 
 	case kTypeNumeric:
 	case kTypeBoolean:
-		if ([value isKindOfClass:NSString.class])
-			value = @([value doubleValue]);
-		else if (error && ![value isKindOfClass:NSNumber.class])
+		if (error && ![value isKindOfClass:NSNumber.class])
 			*error = [self errorTypeMismatch:(_type == kTypeBoolean ? @"boolean" : @"numeric")];
 		break;
 
