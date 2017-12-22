@@ -44,8 +44,8 @@
 		- Primitive scalar types such as int, BOOL, float
 
 	All proprties are required to be present in JSON data when decoding from JSON, unless a property is makred with the <Optional> protocol. For scalar properties, because there is no way of attaching protocols to them, use the propertyIsOptional method instead.
-
-	When encoding to JSON, properties with the value of nil are not included in the resulting JSON string; scalar types are always included regardless of their value. Additionally the <DecodeOnly> protocol (or the corresponding method propertyIsDecodeOnly for scalar types) can be used for properties that should be ignored when encoding, but included when decoding from JSON.
+		
+	When encoding to JSON, properties with the value of nil are not included in the resulting JSON string; scalar types are always included regardless of their value.
 
 	NSNumber and the scalar types are all mutually convertible; an attempt to convert between any other types listed above during decoding results in error.
 
@@ -69,7 +69,13 @@ typedef enum
 	JSONCoderOptions;
 
 
-@interface JSONCoder : NSObject
+@protocol JSONable
+- (NSDictionary *)toDictionary;
++ (instancetype)fromDictionary:(NSDictionary *)dict;
+@end
+
+
+@interface JSONCoder : NSObject <JSONable>
 
 // Global options that affect all classes by default
 @property (class) JSONCoderOptions globalEncoderOptions; // to JSON
@@ -101,18 +107,15 @@ typedef enum
 
 + (Class)classForCollectionProperty:(NSString *)propertyName;
 + (BOOL)propertyIsOptional:(NSString *)propertyName;
-+ (BOOL)propertyIsDecodeOnly:(NSString *)propertyName;
 
-- (instancetype)clone; // Deep copy of all encodable properties; assumes that all NSString, NSArray and NSDictionary properties are immutable
+- (instancetype)clone; // Deep copy of all encodable properties; assumes that all NSString, NSArray and NSDictionary properties are immutable, i.e. copying of pointers is enough
+
+- (instancetype)diff:(JSONCoder *)other; // An object with only fields that are different from other's, i.e. a diff of two objects; returns nil if they are equal
 
 @end
 
 
 @protocol Ignore
-@end
-
-
-@protocol DecodeOnly // ignore when converting to JSON
 @end
 
 
@@ -126,7 +129,7 @@ typedef enum
 
 
 // Prevent compiler warnings when assigning to and from properties with JSON protocols
-@interface NSObject (JSONCoderPropertyCompatibility) <Optional, Ignore, DateOnly, DecodeOnly>
+@interface NSObject (JSONCoderPropertyCompatibility) <Optional, Ignore, DateOnly>
 @end
 
 

@@ -19,7 +19,7 @@ Data types allowed in encodable properties are:
 
 All proprties are required to be present in JSON data when decoding from JSON, unless a property is makred with the `<Optional>` protocol. For scalar properties, because there is no way of attaching protocols to them, use the `propertyIsOptional` method instead.
 
-When encoding to JSON, properties with the value of `nil` are not included in the resulting JSON string; scalar types are always included regardless of their value. Additionally the `<DecodeOnly>` protocol (or the corresponding method `propertyIsDecodeOnly` for scalar types) can be used for properties that should be ignored when encoding, but included when decoding from JSON.
+When encoding to JSON, properties with the value of `nil` are not included in the resulting JSON string; scalar types are always included regardless of their value.
 
 `NSNumber` and the scalar types are all mutually convertible; an attempt to convert between any other types listed above during decoding results in error.
 

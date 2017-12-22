@@ -94,7 +94,6 @@ typedef enum { kTypeObject, kTypeArray, kTypeDict, kTypeString, kTypeNumeric, kT
 @public
 	NSString *_name;
 	BOOL _optional;
-	BOOL _decodeOnly;
 }
 
 
@@ -128,7 +127,6 @@ static NSString *toSnakeCase(NSString *s)
 
 		char *type = property_copyAttributeValue(property, "T");
 		_optional = strstr(type, "<Optional>") != NULL || [coderClass propertyIsOptional:_name];
-		_decodeOnly = strstr(type, "<DecodeOnly>") != NULL || [coderClass propertyIsDecodeOnly:_name];
 		ignore = strstr(type, "<Ignore>") != NULL;
 
 		if (ignore)
@@ -269,6 +267,38 @@ static NSString *toSnakeCase(NSString *s)
 }
 
 
+- (id)toValueWithInstance:(JSONCoder *)obj1 ifDifferentFrom:(JSONCoder *)obj2
+{
+	id value1 = [obj1 valueForKey:_name];
+	id value2 = [obj2 valueForKey:_name];
+
+	switch (_type)
+	{
+	case kTypeObject:
+		return [value1 diff:value2] ? value1 : nil;
+
+	case kTypeArray:
+		return [value1 isEqualToArray:value2] ? nil : value1;
+
+	case kTypeDict:
+		return [value1 isEqualToDictionary:value2] ? nil : value1;
+
+	case kTypeString:
+		return [value1 isEqualToString:value2] ? nil : value1;
+
+	case kTypeDate:
+	case kTypeDateTime:
+		return [value1 isEqualToDate:value2] ? nil : value1;
+
+	case kTypeBoolean:
+	case kTypeNumeric:
+		return [value1 isEqualToNumber:value2] ? nil : value1;
+	}
+
+	assert(0);
+}
+
+
 - (void)fromValue:(id)value withInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	// TODO: in case of NSNull the value should be set to its default: 0 or nil depending on the type
@@ -377,10 +407,6 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	{ return NO; }
 
 
-+ (BOOL)propertyIsDecodeOnly:(NSString *)propertyName
-	{ return NO; }
-
-
 + (JSONCoderMaps *)JSONMaps
 {
 	JSONCoderMaps *maps = objc_getAssociatedObject(self, @selector(JSONMaps));
@@ -418,10 +444,10 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	{ objc_setAssociatedObject(self, @selector(JSONMaps), maps, OBJC_ASSOCIATION_RETAIN_NONATOMIC); }
 
 
-+ (NSDictionary <NSString *, JSONProperty *> *)mapWithOptions:(JSONCoderOptions)options
++ (NSDictionary <NSString *, JSONProperty *> *)mapWithConversion:(BOOL)snakeCase
 {
 	JSONCoderMaps *maps = [self.class JSONMaps];
-	return (options & kJSONSnakeCase) ? maps.snakeCaseMap : maps.camelCaseMap;
+	return snakeCase ? maps.snakeCaseMap : maps.camelCaseMap;
 }
 
 
@@ -438,18 +464,15 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	if (options == kJSONUseClassOptions)
 		options = self.class.encoderOptions;
 
-	NSDictionary <NSString *, JSONProperty *> *map = [self.class mapWithOptions:options];
+	NSDictionary <NSString *, JSONProperty *> *map = [self.class mapWithConversion:(options & kJSONSnakeCase)];
 
 	NSMutableDictionary *result = [NSMutableDictionary new];
 	for (NSString *key in map)
 	{
 		JSONProperty *prop = map[key];
-		if ((options & kJSONClone) || !prop->_decodeOnly)
-		{
-			id value = [prop toValueWithInstance:self options:options];
-			if (value)
-				result[key] = value;
-		}
+		id value = [prop toValueWithInstance:self options:options];
+		if (value)
+			result[key] = value;
 	}
 
 	return result;
@@ -498,21 +521,18 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	NSError *localError = nil;
 	JSONCoder *result = [self new];
 
-	NSDictionary <NSString *, JSONProperty *> *map = [self.class mapWithOptions:options];
+	NSDictionary <NSString *, JSONProperty *> *map = [self.class mapWithConversion:(options & kJSONSnakeCase)];
 
 	for (NSString *key in map)
 	{
 		JSONProperty *prop = map[key];
-		if (prop)
-		{
-			id value = dict[key];
-			if (value || prop->_optional || (options & kJSONClone))
-				[prop fromValue:value withInstance:result options:options error:&localError];
-			else
-				localError = [prop errorWithCode:5 description:@"%@ is required"];
-			if (localError)
-				break;
-		}
+		id value = dict[key];
+		if (value || prop->_optional || (options & kJSONClone))
+			[prop fromValue:value withInstance:result options:options error:&localError];
+		else
+			localError = [prop errorWithCode:5 description:@"%@ is required"];
+		if (localError)
+			break;
 	}
 
 	if (localError)
@@ -588,6 +608,25 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 - (instancetype)clone
 	{ return [self.class fromDictionary:[self toDictionaryWithOptions:(kJSONNoMapping | kJSONClone)] options:(kJSONNoMapping | kJSONClone) error:nil]; }
+
+
+- (instancetype)diff:(JSONCoder *)other
+{
+	JSONCoder* coder = nil;
+	NSDictionary <NSString *, JSONProperty *> *map = [self.class mapWithConversion:NO];
+	for (NSString *key in map)
+	{
+		JSONProperty *prop = map[key];
+		id diffValue = [prop toValueWithInstance:self ifDifferentFrom:other];
+		if (diffValue)
+		{
+			if (!coder)
+				coder = [self.class new];
+			[coder setValue:diffValue forKey:key];
+		}
+	}
+	return coder;
+}
 
 
 @end
