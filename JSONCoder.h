@@ -39,8 +39,8 @@
 		- NSNumber
 		- NSDate, optionally with <DateOnly> protocol; these are converted to and from ISO8601 time stamps
 		- Object types derived from JSONCoder
-		- NSArray of any of the above; the array item type can be specified by overriding the classForCollectionProperty method, though this is not required for NSString and NSNumber element types
-		- NSDictionary with the following element types: NSString, NSNumber, also nested arrays and dictionaries of the same
+		- NSDictionary with the following element types: NSString, NSNumber, NSDate, as well as nested arrays and dictionaries
+		- NSArray of any of the above; the array item type can be specified by overriding the classForCollectionProperty method, though this is not required for NSString, NSNumber and NSDate element types, as well as nested arrays and dictionaries
 		- Primitive scalar types such as int, BOOL, float
 
 	All proprties are required to be present in JSON data when decoding from JSON, unless a property is makred with the <Optional> protocol. For scalar properties, because there is no way of attaching protocols to them, use the propertyIsOptional method instead.
@@ -95,9 +95,9 @@ typedef enum
 - (NSString *)toJSONStringWithOptions:(JSONCoderOptions)options;
 
 + (instancetype)fromDictionary:(NSDictionary *)dict;
-+ (instancetype)fromDictionary:(NSDictionary *)dict options:(JSONCoderOptions)options error:(NSError **)error;
++ (instancetype)fromDictionary:(NSDictionary *)dict parent:(JSONCoder *)parent options:(JSONCoderOptions)options error:(NSError **)error;
 + (NSArray *)fromArrayOfDictionaries:(NSArray *)array;
-+ (NSArray *)fromArrayOfDictionaries:(NSArray *)array options:(JSONCoderOptions)options error:(NSError **)error;
++ (NSArray *)fromArrayOfDictionaries:(NSArray *)array parent:(JSONCoder *)parent options:(JSONCoderOptions)options error:(NSError **)error;
 
 + (instancetype)fromJSONData:(NSData *)data;
 + (instancetype)fromJSONData:(NSData *)data options:(JSONCoderOptions)options error:(NSError **)error;
@@ -134,6 +134,7 @@ typedef enum
 
 
 @interface NSDate (ISO8601)
+- (NSString *)toISO8601DateTimeMsString;
 - (NSString *)toISO8601DateTimeString;
 - (NSString *)toISO8601DateString;
 + (NSDate *)fromISO8601String:(NSString *)string;

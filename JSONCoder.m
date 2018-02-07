@@ -54,6 +54,10 @@ static NSDateFormatter *ISO8601Formatter(ISODateFormat format)
 }
 
 
+- (NSString *)toISO8601DateTimeMsString
+	{ return [ISO8601Formatter(kISODateTimeMs) stringFromDate:self]; }
+
+
 - (NSString *)toISO8601DateTimeString
 	{ return [ISO8601Formatter(kISODateTime) stringFromDate:self]; }
 
@@ -249,7 +253,7 @@ static NSString *toSnakeCase(NSString *s)
 		return value;
 
 	case kTypeDateTime:
-		return [value toISO8601DateTimeString];
+		return [value toISO8601DateTimeMsString];
 
 	case kTypeDate:
 		return [value toISO8601DateString];
@@ -301,7 +305,6 @@ static NSString *toSnakeCase(NSString *s)
 
 - (void)fromValue:(id)value withInstance:(JSONCoder*)coder options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
-	// TODO: in case of NSNull the value should be set to its default: 0 or nil depending on the type
 	if (!value || [value isKindOfClass:NSNull.class])
 		return;
 
@@ -310,7 +313,7 @@ static NSString *toSnakeCase(NSString *s)
 
 	case kTypeObject:
 		if ([value isKindOfClass:NSDictionary.class])
-			value = [_itemClass fromDictionary:value options:options error:error];
+			value = [_itemClass fromDictionary:value parent:coder options:options error:error];
 		else if (error)
 			*error = [self errorTypeMismatch:@"nested object"];
 		break;
@@ -319,7 +322,7 @@ static NSString *toSnakeCase(NSString *s)
 		if ([value isKindOfClass:NSArray.class])
 		{
 			if (_itemClass) // transform if item class is known
-				value = [_itemClass fromArrayOfDictionaries:value options:options error:error];
+				value = [_itemClass fromArrayOfDictionaries:value parent:coder options:options error:error];
 		}
 		else if (error)
 			*error = [self errorTypeMismatch:@"array of objects"];
@@ -507,10 +510,10 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 
 + (instancetype)fromDictionary:(NSDictionary *)dict
-	{ return [self fromDictionary:dict options:kJSONUseClassOptions error:nil]; }
+	{ return [self fromDictionary:dict parent:nil options:kJSONUseClassOptions error:nil]; }
 
 
-+ (instancetype)fromDictionary:(NSDictionary *)dict options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
++ (instancetype)fromDictionary:(NSDictionary *)dict parent:(JSONCoder *)parent options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	if (!dict)
 		return nil;
@@ -521,7 +524,7 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	NSError *localError = nil;
 	JSONCoder *result = [self new];
 
-	NSDictionary <NSString *, JSONProperty *> *map = [self.class mapWithConversion:(options & kJSONSnakeCase)];
+	NSDictionary <NSString *, JSONProperty *> *map = [self mapWithConversion:(options & kJSONSnakeCase)];
 
 	for (NSString *key in map)
 	{
@@ -547,10 +550,10 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 
 + (NSArray *)fromArrayOfDictionaries:(NSArray *)array
-	{ return [self fromArrayOfDictionaries:array options:kJSONUseClassOptions error:nil]; }
+	{ return [self fromArrayOfDictionaries:array parent:nil options:kJSONUseClassOptions error:nil]; }
 
 
-+ (NSArray *)fromArrayOfDictionaries:(NSArray *)array options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
++ (NSArray *)fromArrayOfDictionaries:(NSArray *)array parent:(JSONCoder *)parent options:(JSONCoderOptions)options error:(NSError *__autoreleasing*)error
 {
 	if (!array)
 		return nil;
@@ -560,7 +563,7 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	{
 		if ([element isKindOfClass:NSDictionary.class])
 		{
-			id object = [self fromDictionary:element options:options error:error];
+			id object = [self fromDictionary:element parent:parent options:options error:error];
 			if (object)
 				[result addObject:object];
 			if (error && *error)
@@ -594,7 +597,7 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 		return nil;
 	}
 
-	return [self fromDictionary:result options:options error:error];
+	return [self fromDictionary:result parent:nil options:options error:error];
 }
 
 
@@ -607,7 +610,7 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 
 
 - (instancetype)clone
-	{ return [self.class fromDictionary:[self toDictionaryWithOptions:(kJSONNoMapping | kJSONClone)] options:(kJSONNoMapping | kJSONClone) error:nil]; }
+	{ return [self.class fromDictionary:[self toDictionaryWithOptions:(kJSONNoMapping | kJSONClone)] parent:nil options:(kJSONNoMapping | kJSONClone) error:nil]; }
 
 
 - (instancetype)diff:(JSONCoder *)other

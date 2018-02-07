@@ -18,3 +18,7 @@ xcuserdata
 *.hmap
 *.ipa
 Pods/
+JSONCoderTest.xcodeproj/project.pbxproj
+main.m
+test-camel.json
+test.json

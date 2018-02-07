@@ -13,8 +13,8 @@ Data types allowed in encodable properties are:
 - `NSNumber`
 - `NSDate`, optionally with `<DateOnly>` protocol; these are converted to and from ISO8601 time stamps
 - Object types derived from `JSONCoder`
-- `NSArray` of any of the above; the array item type can be specified by overriding the `classForCollectionProperty` method, though this is not required for `NSString` and `NSNumber` element types
-- `NSDictionary` with the following element types: `NSString`, `NSNumber`, also nested arrays and dictionaries of the same
+- `NSDictionary` with the following element types: `NSString`, `NSNumber`, `NSDate`, as well as nested arrays and dictionaries
+- `NSArray` of any of the above; the array item type can be specified by overriding the `classForCollectionProperty` method, though this is not required for `NSString`, `NSNumber` and `NSDate` element types, as well as nested arrays and dictionaries
 - Primitive scalar types such as `int`, `BOOL`, `float`
 
 All proprties are required to be present in JSON data when decoding from JSON, unless a property is makred with the `<Optional>` protocol. For scalar properties, because there is no way of attaching protocols to them, use the `propertyIsOptional` method instead.
