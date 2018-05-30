@@ -271,15 +271,18 @@ static NSString *toSnakeCase(NSString *s)
 }
 
 
-- (id)toValueWithInstance:(JSONCoder *)obj1 ifDifferentFrom:(JSONCoder *)obj2
+- (id)toDictValueWithInstance:(JSONCoder *)obj1 ifDifferentFrom:(JSONCoder *)obj2
 {
 	id value1 = [obj1 valueForKey:_name];
 	id value2 = [obj2 valueForKey:_name];
 
+	if (!value1)
+		return value2 ? [NSNull null] : nil;
+
 	switch (_type)
 	{
 	case kTypeObject:
-		return [value1 diff:value2] ? value1 : nil;
+		return [value1 diff:value2] ? [value1 toDictionary] : nil;
 
 	case kTypeArray:
 		return [value1 isEqualToArray:value2] ? nil : value1;
@@ -613,22 +616,27 @@ static JSONCoderOptions _globalDecoderOptions = kJSONSnakeCase;
 	{ return [self.class fromDictionary:[self toDictionaryWithOptions:(kJSONNoMapping | kJSONClone)] parent:nil options:(kJSONNoMapping | kJSONClone) error:nil]; }
 
 
-- (instancetype)diff:(JSONCoder *)other
+- (NSDictionary *)diff:(JSONCoder *)other
 {
-	JSONCoder* coder = nil;
-	NSDictionary <NSString *, JSONProperty *> *map = [self.class mapWithConversion:NO];
-	for (NSString *key in map)
+	if (!other)
+		return [self toDictionary];
+	else
 	{
-		JSONProperty *prop = map[key];
-		id diffValue = [prop toValueWithInstance:self ifDifferentFrom:other];
-		if (diffValue)
+		NSMutableDictionary *result = nil;
+		NSDictionary <NSString *, JSONProperty *> *map = [self.class mapWithConversion:(self.class.encoderOptions & kJSONSnakeCase)];
+		for (NSString *key in map)
 		{
-			if (!coder)
-				coder = [self.class new];
-			[coder setValue:diffValue forKey:key];
+			JSONProperty *prop = map[key];
+			id diffValue = [prop toDictValueWithInstance:self ifDifferentFrom:other];
+			if (diffValue)
+			{
+				if (!result)
+					result = [NSMutableDictionary new];
+				result[key] = diffValue;
+			}
 		}
+		return result;
 	}
-	return coder;
 }
 
 

@@ -34,7 +34,7 @@
 	Only read-write properties are included in JSON encoding/decoding. To exclude a read-write property, mark its type with the <Ignore> protocol. Everything else, i.e. read-only properties, methods, constructors, etc. are ignored by the converter.
 
 	Data types allowed in encodable properties are:
-		
+
 		- NSString
 		- NSNumber
 		- NSDate, optionally with <DateOnly> protocol; these are converted to and from ISO8601 time stamps
@@ -44,7 +44,7 @@
 		- Primitive scalar types such as int, BOOL, float
 
 	All proprties are required to be present in JSON data when decoding from JSON, unless a property is makred with the <Optional> protocol. For scalar properties, because there is no way of attaching protocols to them, use the propertyIsOptional method instead.
-		
+
 	When encoding to JSON, properties with the value of nil are not included in the resulting JSON string; scalar types are always included regardless of their value.
 
 	NSNumber and the scalar types are all mutually convertible; an attempt to convert between any other types listed above during decoding results in error.
@@ -110,7 +110,7 @@ typedef enum
 
 - (instancetype)clone; // Deep copy of all encodable properties; assumes that all NSString, NSArray and NSDictionary properties are immutable, i.e. copying of pointers is enough
 
-- (instancetype)diff:(JSONCoder *)other; // An object with only fields that are different from other's, i.e. a diff of two objects; returns nil if they are equal
+- (NSDictionary *)diff:(JSONCoder *)other; // A dictionary with only fields that are different from other's, i.e. a diff of two objects; returns nil if they are equal
 
 @end
 
